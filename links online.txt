@@ -1,0 +1,8 @@
+repositorio github
+https://github.com/lfspoladore/fiap-tech-challenge-4
+
+streamlit
+https://fiap-tech-challenge-4-bvr37ngx6waocbttyd2ivb.streamlit.app/
+
+powerbi
+https://app.powerbi.com/view?r=eyJrIjoiMGRlNTVlNTgtOTAzZC00OTg0LTg2YTQtYmFmMzUyZTZmODAzIiwidCI6ImNjOTFmZjZlLWQzOTUtNDYxNy1hYjdjLTE4N2NlZGMyZjc4ZiJ9
