@@ -34,16 +34,16 @@ with col1:
     weight = st.number_input("Peso (kg)", min_value=30.0, max_value=200.0, value=70.0)
     family_history = st.selectbox("Histórico Familiar de Sobrepeso?", ["yes", "no"])
     favc = st.selectbox("Consome alimentos calóricos com frequência?", ["yes", "no"])
-    fcvc = st.slider("Frequência de consumo de vegetais (1=Raro, 3=Sempre)", 1, 3, 2)
-    ncp = st.slider("Número de refeições principais por dia", 1, 4, 3)
+    fcvc = st.slider("Frequência de consumo de vegetais (1=raramente, 2=às vezes, 3=sempre)", 1, 2, 3)
+    ncp = st.slider("Número de refeições principais por dia", 1, 2, 3, 4)
 
 with col2:
     caec = st.selectbox("Consome lanches entre as refeições?", ["no", "Sometimes", "Frequently", "Always"])
     smoke = st.selectbox("É fumante?", ["yes", "no"])
-    ch2o = st.slider("Consumo diário de água (1=<1L, 3=>2L)", 1, 3, 2)
+    ch2o = st.slider("Consumo diário de água ( 1=< 1 L/dia, 2=1–2 L/dia, 3=> 2 L/dia)", 1, 2, 3)
     scc = st.selectbox("Monitora calorias ingeridas?", ["yes", "no"])
-    faf = st.slider("Frequência de atividade física semanal (0=Nenhuma, 3=5x+)", 0, 3, 1)
-    tue = st.slider("Tempo diário em dispositivos eletrônicos (0=0-2h, 2=>5h)", 0, 2, 1)
+    faf = st.slider("Frequência de atividade física semanal (0=Nenhuma,  1=~1–2×/sem, 2=~3–4×/sem, 3=5×/sem)", 0, 1, 2, 3)
+    tue = st.slider("Tempo diário em dispositivos eletrônicos (0=0-2h,  1=~3–5 h/dia. 2=>5h)", 0, 1, 2)
     calc = st.selectbox("Consumo de álcool?", ["no", "Sometimes", "Frequently", "Always"])
     mtrans = st.selectbox(
         "Meio de transporte habitual",
