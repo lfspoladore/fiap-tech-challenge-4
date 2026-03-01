@@ -1,0 +1,836 @@
+### NOTEBOOK
+
+# %% [markdown]
+# ## ETL
+
+# %%
+import pandas as pd
+import numpy as np
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.model_selection import (
+    train_test_split,
+    StratifiedKFold,
+    cross_validate,
+    learning_curve
+)
+
+from sklearn.preprocessing import (
+    StandardScaler,
+    OneHotEncoder,
+    LabelEncoder
+)
+
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import cross_val_score
+
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    classification_report,
+    confusion_matrix,
+    ConfusionMatrixDisplay
+)
+
+import xgboost as xgb
+import joblib
+
+# %%
+df = pd.read_csv(r"C:/Users/UM2/Desktop/Data Analytics - FIAP/Fase 4 - Data viz and production models/Tech challenge 4/src/Obesity.csv", sep=",")
+
+df.head()
+
+# %% [markdown]
+# ## EDA
+
+# %% [markdown]
+# ### EDA padrao
+
+# %%
+df.info()
+
+df.shape
+
+# %%
+df.describe().T.round(2)
+
+# %%
+df.isnull().sum()
+
+# %%
+df.duplicated().sum()
+
+# %%
+df.isna().sum()
+
+# %% [markdown]
+# ### EDA visao geral da populacao
+
+# %%
+print(f"Visão geral da população:")
+print(f"Total de indivíduos: {len(df)}")
+
+perc_excesso_peso = df["Obesity"].isin([
+    "Overweight_Level_I",
+    "Overweight_Level_II",
+    "Obesity_Type_I",
+    "Obesity_Type_II",
+    "Obesity_Type_III"
+]).mean() * 100
+
+print(f"% com sobrepeso ou obesidade: {perc_excesso_peso:.1f}%")
+print(f"Idade média: {df['Age'].mean():.1f} anos")
+print(f"Altura média: {df['Height'].mean():.2f} m")
+print(f"Peso médio: {df['Weight'].mean():.1f} kg")
+
+# %%
+ordem_severidade = [
+    "Insufficient_Weight",
+    "Normal_Weight",
+    "Overweight_Level_I",
+    "Overweight_Level_II",
+    "Obesity_Type_I",
+    "Obesity_Type_II",
+    "Obesity_Type_III"
+]
+
+# %%
+plt.figure(figsize=(10,5))
+sns.countplot(
+    data=df,
+    x="Obesity",
+    order=ordem_severidade
+)
+plt.xticks(rotation=45)
+plt.title("Distribuição dos níveis de obesidade (ordem de severidade)")
+plt.ylabel("Número de indivíduos")
+plt.xlabel("Nível de obesidade")
+plt.show()
+
+# %% [markdown]
+# ### EDA fatores antropometricos
+
+# %%
+plt.figure(figsize=(10,6))
+sns.boxplot(
+    data=df,
+    x="Obesity",
+    y="Weight",
+    order=ordem_severidade
+)
+plt.xticks(rotation=45)
+plt.title("Distribuição do peso por nível de obesidade")
+plt.ylabel("Peso (kg)")
+plt.xlabel("Nível de obesidade")
+plt.show()
+
+# %%
+plt.figure(figsize=(8,6))
+sns.scatterplot(
+    data=df,
+    x="Height",
+    y="Weight",
+    hue="Obesity",
+    hue_order=ordem_severidade,
+    alpha=0.6
+)
+plt.title("Relação Altura × Peso por nível de obesidade")
+plt.xlabel("Altura (m)")
+plt.ylabel("Peso (kg)")
+plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+plt.show()
+
+# %% [markdown]
+# ### EDA habitos vs obesidade
+
+# %%
+habitos_labels = {
+    "FAF": "Atividade física (frequência)",
+    "CH2O": "Consumo diário de água",
+    "FCVC": "Consumo de vegetais",
+    "TUE": "Tempo de uso de telas"
+}
+
+# %%
+habitos_colunas = ["FAF", "CH2O", "FCVC", "TUE"]
+
+habitos_por_obesidade = (
+    df.groupby("Obesity")[habitos_colunas]
+      .mean()
+)
+
+habitos_por_obesidade.rename(columns=habitos_labels).plot(
+    kind="bar",
+    figsize=(13,6)
+)
+
+plt.title("Hábitos de vida por nível de obesidade (ordem de severidade)")
+plt.ylabel("Valor médio (escala do questionário)")
+plt.xlabel("Nível de obesidade (do menor para o maior risco)")
+plt.xticks(rotation=45)
+plt.legend(title="Hábito avaliado")
+plt.grid(axis="y", linestyle="--", alpha=0.5)
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
+# ### EDA variaveis categoricas vs obesidade
+
+# %%
+fam_prop = (
+    pd.crosstab(df["Obesity"], df["family_history"], normalize="index")
+    .reindex(ordem_severidade)
+)
+
+plt.figure(figsize=(8,6))
+sns.heatmap(
+    fam_prop,
+    annot=True,
+    fmt=".1%",
+    cmap="Reds"
+)
+
+plt.title("Proporção de histórico familiar por nível de obesidade")
+plt.xlabel("Histórico familiar de excesso de peso")
+plt.ylabel("Nível de obesidade")
+plt.show()
+
+# %%
+favc_prop = (
+    pd.crosstab(df["Obesity"], df["FAVC"], normalize="index")
+    .reindex(ordem_severidade)
+)
+
+favc_prop.plot(
+    kind="bar",
+    stacked=True,
+    figsize=(8,6),
+    color=["#66c2a5", "#fc8d62"]
+)
+
+plt.title("Consumo de alimentos altamente calóricos por obesidade")
+plt.ylabel("Proporção")
+plt.xlabel("Nível de obesidade")
+plt.legend(title="Consome alimentos calóricos?")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+# %%
+alc_prop = (
+    pd.crosstab(df["Obesity"], df["CALC"], normalize="index")
+    .reindex(ordem_severidade)
+)
+
+alc_prop.plot(
+    kind="bar",
+    stacked=True,
+    figsize=(10,6)
+)
+
+plt.title("Distribuição proporcional do consumo de álcool por obesidade")
+plt.ylabel("Proporção")
+plt.xlabel("Nível de obesidade")
+plt.legend(title="Consumo de álcool")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+# %%
+mtrans_prop = (
+    pd.crosstab(df["Obesity"], df["MTRANS"], normalize="index")
+    .reindex(ordem_severidade)
+)
+
+plt.figure(figsize=(10,6))
+sns.heatmap(
+    mtrans_prop,
+    annot=True,
+    fmt=".1%",
+    cmap="Blues"
+)
+plt.title("Proporção de meio de transporte por nível de obesidade")
+plt.xlabel("Meio de transporte")
+plt.ylabel("Nível de obesidade")
+plt.show()
+
+# %% [markdown]
+# ### EDA variaveis numericas vs obesidade
+
+# %%
+variaveis_labels = {
+    "Age": "Idade (anos)",
+    "Height": "Altura (m)",
+    "Weight": "Peso (kg)",
+    "FCVC": "Consumo de vegetais",
+    "NCP": "Número de refeições principais",
+    "CH2O": "Consumo diário de água",
+    "FAF": "Frequência de atividade física",
+    "TUE": "Tempo de uso de telas"
+}
+
+# %%
+variaveis_numericas = ["Age", "Height", "Weight", "FCVC", "NCP", "CH2O", "FAF", "TUE"]
+
+for var in variaveis_numericas:
+    plt.figure(figsize=(10,5))
+    sns.boxplot(
+        data=df,
+        x="Obesity",
+        y=var,
+        order=ordem_severidade
+    )
+    plt.xticks(rotation=45)
+    plt.title(f"{variaveis_labels[var]} por nível de obesidade")
+    plt.ylabel(variaveis_labels[var])
+    plt.xlabel("Nível de obesidade")
+    plt.tight_layout()
+    plt.show()
+
+# %%
+mapa_obesidade = {
+    "Insufficient_Weight": 0,
+    "Normal_Weight": 1,
+    "Overweight_Level_I": 2,
+    "Overweight_Level_II": 3,
+    "Obesity_Type_I": 4,
+    "Obesity_Type_II": 5,
+    "Obesity_Type_III": 6
+}
+
+df["Obesity_ord"] = df["Obesity"].map(mapa_obesidade)
+
+# %%
+corr_obesidade = (
+    df[variaveis_numericas + ["Obesity_ord"]]
+    .corr()["Obesity_ord"]
+    .sort_values(ascending=False)
+)
+
+corr_obesidade
+
+# %%
+plt.figure(figsize=(8,5))
+corr_obesidade.drop("Obesity_ord").plot(kind="barh")
+plt.title("Correlação das variáveis numéricas com o nível de obesidade")
+plt.xlabel("Correlação")
+plt.gca().invert_yaxis()
+plt.show()
+
+# %% [markdown]
+# ### EDA conclusao
+
+# %%
+# ======================================================
+# Conclusão da Análise Exploratória de Dados (EDA)
+# ======================================================
+
+# --- EDA fatores antropométricos -----------------------------------------
+#
+# A análise dos fatores antropométricos evidencia que o peso corporal é o
+# principal elemento discriminante entre os níveis de obesidade.
+# Observa-se um aumento progressivo do peso conforme a severidade da
+# obesidade aumenta, validando clinicamente a classificação utilizada.
+#
+# A altura não apresenta relação direta com o nível de obesidade, indicando
+# que o risco está mais associado ao excesso de peso do que à estatura
+# isoladamente.
+#
+
+# --- EDA hábitos vs obesidade ---------------------------------------------
+#
+# Os gráficos de hábitos de vida por nível de obesidade, organizados em
+# ordem de severidade, evidenciam um padrão progressivo de piora
+# comportamental conforme aumenta a gravidade da obesidade.
+#
+# Indivíduos em níveis mais elevados apresentam menor frequência de
+# atividade física, menor consumo de água e de vegetais, além de maior
+# tempo de exposição a telas, caracterizando um perfil mais sedentário.
+# Esses fatores representam alvos diretos para intervenções preventivas
+# e de acompanhamento clínico.
+#
+
+# --- EDA variáveis categóricas vs obesidade -------------------------------
+#
+# A análise das variáveis categóricas em termos proporcionais indica
+# associação relevante entre obesidade e fatores contextuais.
+#
+# Observa-se maior prevalência de histórico familiar positivo para excesso
+# de peso, maior frequência de consumo de alimentos altamente calóricos,
+# padrões de consumo de álcool mais frequentes e predominância de meios de
+# transporte passivos em indivíduos com maior nível de obesidade.
+#
+# Esses achados reforçam o caráter multifatorial da obesidade, envolvendo
+# aspectos genéticos, comportamentais e ambientais.
+#
+
+# --- EDA variáveis numéricas vs obesidade ---------------------------------
+#
+# A avaliação das variáveis numéricas por meio de boxplots demonstra que
+# fatores relacionados ao estilo de vida apresentam associação clara com a
+# progressão da obesidade.
+#
+# Destacam-se a redução da atividade física, menor ingestão de água e
+# vegetais e aumento do comportamento sedentário conforme o nível de
+# obesidade se agrava.
+#
+
+# --- EDA avaliação das principais variáveis -------------------------------
+#
+# A análise integrada das variáveis numéricas e categóricas indica que os
+# fatores mais associados à obesidade estão relacionados principalmente a
+# hábitos de vida modificáveis e ao histórico familiar.
+#
+# Esses resultados fornecem subsídios importantes para a equipe médica
+# direcionar estratégias de prevenção, acompanhamento e intervenção,
+# priorizando ações voltadas à mudança comportamental e à promoção de
+# hábitos saudáveis.
+#
+
+# --- Insight clínico consolidado ------------------------------------------
+#
+# De forma geral, a análise exploratória evidencia que a obesidade está
+# fortemente associada a comportamentos sedentários, padrões alimentares
+# inadequados e fatores genéticos.
+#
+# A identificação desses padrões ao longo da escala de severidade permite
+# orientar estratégias clínicas mais assertivas, com foco em intervenções
+# precoces nos estágios iniciais de sobrepeso, reduzindo o risco de
+# progressão para quadros mais severos.
+#
+
+
+# %% [markdown]
+# ## MACHINE LEARNING
+
+# %% [markdown]
+# ### Pre-processamento
+
+# %%
+# Engenharia de atributos (conforme dicionário do dataset)
+cols_comportamentais = ['FCVC', 'NCP', 'CH2O', 'FAF', 'TUE']
+df[cols_comportamentais] = df[cols_comportamentais].round()
+
+# Separação features e target
+X = df.drop(["Obesity", "Obesity_ord"], axis=1)
+y = df["Obesity"]
+
+# Encoding da variável alvo
+le = LabelEncoder()
+y_encoded = le.fit_transform(y)
+
+# Separação automática de variáveis numéricas e categóricas
+num_features = X.select_dtypes(include=["int64", "float64"]).columns
+cat_features = X.select_dtypes(include=["object"]).columns
+
+# Pipeline de pré-processamento
+preprocessor = ColumnTransformer([
+    ("num", Pipeline([
+        ("scaler", StandardScaler())
+    ]), num_features),
+
+    ("cat", Pipeline([
+        ("onehot", OneHotEncoder(handle_unknown="ignore"))
+    ]), cat_features)
+])
+
+# %% [markdown]
+# ### Split treino/validacao/teste
+
+# %%
+X_temp, X_test, y_temp, y_test = train_test_split(
+    X, y_encoded,
+    test_size=0.2,
+    stratify=y_encoded,
+    random_state=42
+)
+
+X_train, X_val, y_train, y_val = train_test_split(
+    X_temp, y_temp,
+    test_size=0.25,   # 0.25 * 0.8 = 0.2
+    stratify=y_temp,
+    random_state=42
+)
+
+# %% [markdown]
+# ### Pipeline de modelos
+
+# %%
+preprocessor_linear = ColumnTransformer([
+    ("num", StandardScaler(), num_features),
+
+    ("cat", OneHotEncoder(
+        handle_unknown="ignore",
+        drop="first"
+    ), cat_features)
+])
+
+preprocessor_tree = ColumnTransformer([
+    ("num", "passthrough", num_features),
+
+    ("cat", OneHotEncoder(
+        handle_unknown="ignore",
+        drop="first"
+    ), cat_features)
+])
+
+# %%
+pipe_lr = Pipeline([
+    ("prep", preprocessor_linear),
+    ("model", LogisticRegression(C=0.5, max_iter=1000))
+])
+
+pipe_rf = Pipeline([
+    ("prep", preprocessor_tree),
+    ("model", RandomForestClassifier(
+        n_estimators=200,
+        max_depth=10,
+        min_samples_leaf=10,
+        min_samples_split=20,
+        random_state=42
+    ))
+])
+
+pipe_xgb = Pipeline([
+    ("prep", preprocessor_tree),
+    ("model", xgb.XGBClassifier(
+        objective="multi:softmax",
+        num_class=len(le.classes_),
+        eval_metric="mlogloss",
+        n_estimators=200,
+        max_depth=3,
+        learning_rate=0.05,
+        subsample=0.7,
+        colsample_bytree=0.7,
+        reg_alpha=0.5,
+        reg_lambda=1.5,
+        random_state=42
+    ))
+])
+
+models = {
+    "Logistic Regression": pipe_lr,
+    "Random Forest": pipe_rf,
+    "XGBoost": pipe_xgb
+}
+
+# %% [markdown]
+# ### Metricas dos modelos
+
+# %%
+val_results = []
+
+for name, model in models.items():
+    model.fit(X_train, y_train)
+    y_val_pred = model.predict(X_val)
+    
+    val_results.append({
+        "Modelo": name,
+        "Accuracy Validação": accuracy_score(y_val, y_val_pred),
+        "F1-macro Validação": f1_score(y_val, y_val_pred, average="macro")
+    })
+
+val_df = pd.DataFrame(val_results)
+val_df
+
+# %% [markdown]
+# ### Cross-validation
+
+# %%
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+cv_results = []
+
+for name, model in models.items():
+    scores = cross_validate(
+        model,
+        X_train,
+        y_train,
+        cv=cv,
+        scoring="f1_macro"
+    )
+    cv_results.append({
+        "Modelo": name,
+        "CV F1-macro (mean)": scores["test_score"].mean()
+    })
+
+pd.DataFrame(cv_results)
+
+# %% [markdown]
+# ### Metricas finais
+
+# %%
+resultados_finais = []
+
+for nome, model in models.items():
+
+    model.fit(X_train, y_train)
+
+    pred_val = model.predict(X_val)
+
+    f1_val = f1_score(y_val, pred_val, average="macro")
+
+    cv_scores = cross_val_score(
+        model,
+        X_train,
+        y_train,
+        cv=5,
+        scoring="f1_macro"
+    )
+
+    f1_cv = cv_scores.mean()
+
+    pred_test = model.predict(X_test)
+
+    f1_test = f1_score(y_test, pred_test, average="macro")
+    acc_test = accuracy_score(y_test, pred_test)
+
+    resultados_finais.append({
+        "Modelo": nome,
+        "F1 Validação": f1_val,
+        "F1 CV (mean)": f1_cv,
+        "F1 Teste": f1_test,
+        "Accuracy Teste": acc_test
+    })
+
+df_resultados_final = pd.DataFrame(resultados_finais)
+
+display(
+    df_resultados_final.sort_values(
+        "F1 Teste",
+        ascending=False
+    )
+)
+
+# %% [markdown]
+# ### Escolha do modelo final
+
+# %%
+# Apesar do XGBoost apresentar maior F1-macro, o Random Forest foi escolhido como modelo final por apresentar maior estabilidade entre validação, cross-validation e teste, reduzindo risco de degradação em ambiente de produção
+
+# %%
+final_model = pipe_rf
+final_model.fit(X_train, y_train)
+
+# %%
+y_test_pred = final_model.predict(X_test)
+
+print(
+    classification_report(
+        y_test,
+        y_test_pred,
+        target_names=le.classes_
+    )
+)
+
+# %%
+disp = ConfusionMatrixDisplay.from_estimator(
+    final_model,
+    X_test,
+    y_test,
+    normalize="true",
+    display_labels=le.classes_,
+    cmap=plt.cm.Blues
+)
+
+plt.title("Matriz de Confusão – Modelo Final (Random Forest)")
+
+plt.xticks(rotation=45, ha="right")
+plt.tight_layout()
+
+plt.show()
+
+# %%
+feature_names = final_model.named_steps["prep"].get_feature_names_out()
+
+importances = final_model.named_steps["model"].feature_importances_
+
+feat_imp = (
+    pd.DataFrame({
+        "Feature": feature_names,
+        "Importance": importances
+    })
+    .sort_values(by="Importance", ascending=False)
+    .head(15)
+)
+
+plt.figure(figsize=(8,6))
+sns.barplot(
+    data=feat_imp,
+    x="Importance",
+    y="Feature"
+)
+plt.title("Principais variáveis segundo o modelo")
+plt.show()
+
+# %% [markdown]
+# ### Salvando o modelo
+
+# %%
+joblib.dump(final_model, "model.joblib")
+joblib.dump(le, "label_encoder.joblib")
+
+
+
+
+### APP
+
+import streamlit as st
+import joblib
+import pandas as pd
+
+# ===============================
+# CARREGAR MODELO
+# ===============================
+model = joblib.load("model.joblib")
+
+# label encoder opcional
+try:
+    label_encoder = joblib.load("label_encoder.joblib")
+except:
+    label_encoder = None
+
+
+# ===============================
+# INTERFACE
+# ===============================
+st.set_page_config(page_title="Diagnóstico de Obesidade", layout="wide")
+
+st.title("🏥 Sistema de Diagnóstico de Obesidade")
+st.markdown("Insira os dados do paciente para realizar a predição.")
+
+col1, col2 = st.columns(2)
+
+# -------- COLUNA 1 --------
+with col1:
+    gender = st.selectbox("Gênero", ["Female", "Male"])
+
+    age = int(
+        st.number_input(
+            "Idade",
+            min_value=14,
+            max_value=61,
+            value=25,
+            step=1
+        )
+    )
+
+    height = st.number_input(
+        "Altura (m)",
+        min_value=1.40,
+        max_value=2.10,
+        value=1.70
+    )
+
+    weight = st.number_input(
+        "Peso (kg)",
+        min_value=30.0,
+        max_value=200.0,
+        value=70.0
+    )
+
+    family_history = st.selectbox(
+        "Histórico Familiar de Sobrepeso?",
+        ["yes", "no"]
+    )
+
+    favc = st.selectbox(
+        "Consome alimentos calóricos com frequência?",
+        ["yes", "no"]
+    )
+
+    fcvc = st.slider(
+        "Frequência de consumo de vegetais (1=raramente, 2=às vezes, 3=sempre)",
+        min_value=1,
+        max_value=3,
+        value=2
+    )
+
+    ncp = st.slider(
+        "Número de refeições principais por dia",
+        min_value=1,
+        max_value=4,
+        value=3
+    )
+
+# -------- COLUNA 2 --------
+with col2:
+    caec = st.selectbox(
+        "Consome lanches entre as refeições?",
+        ["no", "Sometimes", "Frequently", "Always"]
+    )
+
+    smoke = st.selectbox("É fumante?", ["yes", "no"])
+
+    ch2o = st.slider(
+        "Consumo diário de água (1=<1 L/dia, 2=1–2 L/dia, 3=>2 L/dia)",
+        min_value=1,
+        max_value=3,
+        value=2
+    )
+
+    scc = st.selectbox("Monitora calorias ingeridas?", ["yes", "no"])
+
+    faf = st.slider(
+        "Frequência de atividade física semanal (0=Nenhuma, 1=~1–2×/sem, 2=~3–4×/sem, 3=5×/sem)",
+        min_value=0,
+        max_value=3,
+        value=1
+    )
+
+    tue = st.slider(
+        "Tempo diário em dispositivos eletrônicos (0=0-2h, 1=~3–5h, 2=>5h)",
+        min_value=0,
+        max_value=2,
+        value=1
+    )
+
+    calc = st.selectbox(
+        "Consumo de álcool?",
+        ["no", "Sometimes", "Frequently", "Always"]
+    )
+
+    mtrans = st.selectbox(
+        "Meio de transporte habitual",
+        ["Public_Transportation", "Walking", "Automobile", "Motorbike", "Bike"]
+    )
+
+
+# ===============================
+# PREDIÇÃO
+# ===============================
+if st.button("Realizar Diagnóstico"):
+
+    input_data = pd.DataFrame([{
+        "Gender": gender,
+        "Age": age,
+        "Height": height,
+        "Weight": weight,
+        "family_history": family_history,
+        "FAVC": favc,
+        "FCVC": fcvc,
+        "NCP": ncp,
+        "CAEC": caec,
+        "SMOKE": smoke,
+        "CH2O": ch2o,
+        "SCC": scc,
+        "FAF": faf,
+        "TUE": tue,
+        "CALC": calc,
+        "MTRANS": mtrans
+    }])
+
+    prediction = model.predict(input_data)[0]
+
+    if label_encoder is not None:
+        prediction = label_encoder.inverse_transform([prediction])[0]
+
+    st.success(
+        f"🏥 O nível de obesidade diagnosticado é: **{prediction.replace('_',' ')}**"
+    )
